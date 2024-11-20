@@ -1,0 +1,89 @@
+version: '3.7'
+
+services:
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-lbpwa
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+      - ./docker/nginx/ssl:/etc/nginx/ssl
+      - ./:/var/www:ro,cached
+      - ./storage/logs/nginx:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - laravel
+
+  app:
+    build:
+      args:
+        user: dimka
+        uid: 1000
+      context: ./docker
+      dockerfile: ./app/Dockerfile
+    image: app
+    container_name: app-lbpwa
+    restart: unless-stopped
+    working_dir: /var/www/
+    volumes:
+      - ./:/var/www
+      - ~/.ssh:/root/.ssh:delegated
+    depends_on:
+      - db
+    networks:
+      - laravel
+
+  db:
+    image: mysql:8.0
+    container_name: mysql-lbpwa
+    restart: unless-stopped
+    ports:
+      - 3306:3306
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+    volumes:
+      - ./storage/mysql-data:/var/lib/mysql:delegated
+      - ./storage/logs/mysql:/var/log/mysql
+    networks:
+      - laravel
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: pma-lbpwa
+    ports:
+      - 8880:80
+    links:
+      - db
+    restart: always
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+      PMA_USER: ${DB_USERNAME}
+      PMA_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - laravel
+
+  smtp:
+    image: mailhog/mailhog:latest
+    container_name: smtp-lbpwa
+    logging:
+      driver: 'none'
+    ports:
+      - "8003:1025"
+      - "8100:8025"
+    networks:
+      - laravel
+
+
+networks:
+  laravel:
+    driver: bridge
